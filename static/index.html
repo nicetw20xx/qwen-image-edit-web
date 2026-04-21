@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qwen Image Edit</title>
+    <link rel="icon" href="#">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'app-bg': '#1a1a2e',
+                        'app-card': '#16213e',
+                        'app-border': '#2a2a4a',
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <style>
+        @keyframes dots {
+            0% {
+                content: ''
+            }
+
+            25% {
+                content: '.'
+            }
+
+            50% {
+                content: '..'
+            }
+
+            75% {
+                content: '...'
+            }
+        }
+
+        .generating-dots::after {
+            content: '';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+    </style>
+</head>
+
+<body class="font-sans bg-app-bg text-gray-200 min-h-screen">
+    <div id="app">
+        <h1 class="text-center p-4 text-purple-400 text-2xl font-bold">Qwen Image Edit</h1>
+        <div class="flex gap-5 p-5 max-w-7xl mx-auto max-md:flex-col">
+
+            <!-- Input Panel -->
+            <div class="w-[400px] shrink-0 flex flex-col gap-3 max-md:w-full">
+                <div>
+                    <label class="font-semibold text-sm text-purple-400">Prompt</label>
+                    <textarea
+                        class="w-full min-h-[80px] p-2.5 border border-gray-700 rounded-lg bg-app-card text-gray-200 text-sm resize-y focus:outline-none focus:border-purple-400"
+                        v-model="prompt" placeholder="Describe the edit you want..."></textarea>
+                </div>
+
+                <div>
+                    <label class="font-semibold text-sm text-purple-400">Images</label>
+                    <div class="border-2 border-dashed border-gray-600 rounded-lg p-5 text-center text-gray-500 cursor-pointer transition-all min-h-[80px]"
+                        :class="{ 'border-purple-400 bg-purple-400/10 text-purple-400': isDragOver }"
+                        @dragover.prevent="isDragOver = true" @dragleave="isDragOver = false"
+                        @drop.prevent="handleFileDrop" @click="$refs.fileInput.click()">
+                        <div class="text-sm">Drop images, paste (Ctrl+V), or click to select</div>
+                    </div>
+                    <input type="file" ref="fileInput" multiple accept="image/*" @change="handleFileSelect"
+                        class="hidden">
+                </div>
+
+                <div class="flex flex-wrap gap-2" v-if="inputImages.length">
+                    <div v-for="(img, idx) in inputImages" :key="img.id"
+                        class="relative w-[72px] h-[72px] rounded-md overflow-hidden cursor-grab border-2 border-transparent transition-colors hover:border-purple-400"
+                        :class="{ 'opacity-40': dragIndex === idx }" draggable="true"
+                        @dragstart="onThumbDragStart(idx, $event)" @dragover.prevent="onThumbDragOver(idx)"
+                        @dragend="onThumbDragEnd" @drop.prevent="onThumbDrop(idx)">
+                        <img :src="img.objectUrl" class="w-full h-full object-cover"
+                            @click.stop="openPreview(img.objectUrl)">
+                        <button
+                            class="absolute top-0.5 right-0.5 w-[18px] h-[18px] bg-black/70 text-white border-none rounded-full text-xs cursor-pointer flex items-center justify-center leading-none"
+                            @click.stop="removeInputImage(idx)">&times;</button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="font-semibold text-sm text-purple-400">LoRA (optional)</label>
+                    <div class="flex flex-wrap gap-2">
+                        <span v-for="lora in availableLoras" :key="lora"
+                            class="px-3 py-1.5 border rounded-full bg-app-card text-gray-400 text-xs cursor-pointer transition-all select-none hover:border-purple-400 hover:text-purple-400"
+                            :class="selectedLoras.includes(lora) ? 'border-purple-400 bg-purple-400/20 !text-purple-400 font-semibold' : 'border-gray-600'"
+                            @click="toggleLora(lora)">
+                            {{ decodeName(lora) }}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Inference Parameters -->
+                <div class="flex flex-col gap-2">
+                    <label class="font-semibold text-sm text-purple-400">Parameters</label>
+                    <div class="flex flex-col gap-1">
+                        <div class="flex items-center gap-2">
+                            <label class="text-xs text-gray-400 w-36 shrink-0">Guidance Scale</label>
+                            <input type="number" step="0.1" min="0" max="20" v-model.number="guidanceScale"
+                                class="flex-1 p-1.5 border border-gray-700 rounded bg-app-card text-gray-200 text-sm focus:outline-none focus:border-purple-400">
+                        </div>
+                        <div class="text-[0.65rem] text-gray-500 ml-1">0~20. Higher = stronger denoising guidance. 0 =
+                            no guidance.
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <div class="flex items-center gap-2">
+                            <label class="text-xs text-gray-400 w-36 shrink-0">True CFG Scale</label>
+                            <input type="number" step="0.1" min="1" max="20" v-model.number="trueCfgScale"
+                                class="flex-1 p-1.5 border border-gray-700 rounded bg-app-card text-gray-200 text-sm focus:outline-none focus:border-purple-400">
+                        </div>
+                        <div class="text-[0.65rem] text-gray-500 ml-1">1~20. Higher = stricter prompt adherence. 1 = no
+                            effect.
+                            Lightning LoRA ~1, base ~4.</div>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <div class="flex items-center gap-2">
+                            <label class="text-xs text-gray-400 w-36 shrink-0">Inference Steps</label>
+                            <input type="number" step="1" min="1" max="100" v-model.number="numInferenceSteps"
+                                class="flex-1 p-1.5 border border-gray-700 rounded bg-app-card text-gray-200 text-sm focus:outline-none focus:border-purple-400">
+                        </div>
+                        <div class="text-[0.65rem] text-gray-500 ml-1">1~100. More steps = finer detail but slower.
+                            Lightning LoRA
+                            ~4, base ~40.</div>
+                    </div>
+                </div>
+
+                <button
+                    class="px-5 py-2.5 bg-purple-400 text-white border-none rounded-lg text-base font-semibold cursor-pointer transition-colors hover:bg-purple-500 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                    @click="submitRequest" :disabled="!prompt.trim()">
+                    Generate
+                </button>
+            </div>
+
+            <!-- History Panel -->
+            <div class="flex-1 min-w-0">
+                <div class="text-lg font-semibold text-purple-400 mb-3">History</div>
+                <div v-if="!historyItems.length" class="text-gray-600 italic">No generations yet.</div>
+
+                <div v-for="item in historyItems" :key="item.id"
+                    class="bg-app-card border border-app-border rounded-xl p-3.5 mb-3">
+                    <div class="flex flex-wrap gap-1.5 mb-1.5" v-if="item.loraFilenames.length">
+                        <label class="text-xs text-gray-500 w-full">LoRA:</label>
+                        <span v-for="lora in item.loraFilenames" :key="lora"
+                            class="px-3 py-1 border border-purple-400 rounded-full bg-purple-400/20 text-purple-400 text-xs font-semibold select-none">
+                            {{ decodeName(lora) }}
+                        </span>
+                    </div>
+                    <div class="text-sm mb-2 break-words">{{ item.prompt }}</div>
+                    <div class="flex flex-wrap gap-x-4 gap-y-0.5 text-[0.7rem] text-gray-500 mb-2">
+                        <span>Guidance: {{ item.guidanceScale }}</span>
+                        <span>True CFG: {{ item.trueCfgScale }}</span>
+                        <span>Steps: {{ item.numInferenceSteps }}</span>
+                    </div>
+
+                    <div class="flex flex-wrap gap-1.5 mb-2" v-if="item.inputImages.length">
+                        <label class="text-xs text-gray-500 w-full">Input:</label>
+                        <div v-for="(img, idx) in item.inputImages" :key="idx" class="relative">
+                            <img class="w-[60px] h-[60px] object-cover rounded cursor-pointer border border-gray-700 hover:border-purple-400"
+                                :src="img.objectUrl" @click="openPreview(img.objectUrl)">
+                            <button
+                                class="block mt-0.5 px-1.5 text-[0.7rem] bg-gray-700 text-purple-400 border border-purple-400 rounded cursor-pointer hover:bg-purple-400 hover:text-white"
+                                @click="addFileToInput(img.file)">to prompt</button>
+                        </div>
+                    </div>
+
+                    <div class="mt-2">
+                        <div v-if="item.status === 'generating'" class="text-amber-400 text-sm generating-dots">
+                            Generating</div>
+                        <div v-else-if="item.status === 'error'" class="text-red-500 text-sm">{{ item.errorMessage }}
+                        </div>
+                        <div v-else-if="item.status === 'done'">
+                            <label class="text-xs text-gray-500 block mb-1">Result:</label>
+                            <div class="relative inline-block">
+                                <img class="max-w-full max-h-[400px] rounded-md cursor-pointer border border-gray-700 hover:border-purple-400"
+                                    :src="item.resultUrl" @click="openPreview(item.resultUrl)">
+                                <div>
+                                    <button
+                                        class="mt-1 px-1.5 text-[0.7rem] bg-gray-700 text-purple-400 border border-purple-400 rounded cursor-pointer hover:bg-purple-400 hover:text-white"
+                                        @click="item.resultFile ? addFileToInput(item.resultFile) : addToInput(item.resultUrl)">to
+                                        prompt</button>
+                                </div>
+                            </div>
+                        </div>
+                        <button
+                            class="mb-2 px-2.5 py-1 text-xs bg-gray-700 text-purple-400 border border-purple-400 rounded cursor-pointer hover:bg-purple-400 hover:text-white"
+                            @click="resendRequest(item)">Resend</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Preview Modal -->
+        <div v-if="previewUrl"
+            class="fixed inset-0 bg-black/90 z-[1000] flex items-center justify-center cursor-pointer"
+            @click="previewUrl = null">
+            <img :src="previewUrl" class="max-w-[95vw] max-h-[95vh] object-contain" @click.stop>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
