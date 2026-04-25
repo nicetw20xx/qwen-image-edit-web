@@ -9,6 +9,7 @@ const STATIC_DIR = path.join(ROOT_DIR, "static");
 const READY_DELAY_MS = 5000;
 const LORAS = [
     "https://huggingface.co/lightx2v/Qwen-Image-Lightning/blob/main/Qwen-Image-Edit-2509/Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
+    "https://huggingface.co/lightx2v/Qwen-Image-Lightning/blob/main/Qwen-Image-Edit-2509/Qwen-Image-Edit-2509-Lightning-8steps-V1.0-bf16.safetensors",
     "https://huggingface.co/dx8152/Qwen-Image-Edit-2509-Fusion/blob/main/%E6%BA%B6%E5%9B%BE.safetensors"
 ];
 
@@ -20,61 +21,60 @@ class MockImageStore {
     constructor(readyDelayMs) {
         this.readyDelayMs = readyDelayMs;
         this.items = Object.create(null);
+        this.outputBuffers = Object.create(null);
         this.crc32Table = this.createCrc32Table();
-        this.fallbackPngBuffer = this.generateSolidPng(500, 500, 0xcc, 0xcc, 0xcc, 255);
     }
 
-    createRequest() {
+    createRequest(numImagesPerPrompt) {
         const requestId = this.nextRequestId();
-        this.items[requestId] = this.fallbackPngBuffer;
+        this.items[requestId] = null;
+
+        setTimeout(() => {
+            const filenames = [];
+            for (let idx = 0; idx < numImagesPerPrompt; idx += 1) {
+                const filename = `${requestId}_${idx}.png`;
+                const red = (92 + (idx * 29)) % 256;
+                const green = (122 + (idx * 47)) % 256;
+                const blue = (164 + (idx * 61)) % 256;
+                const imageBuffer = this.generateSolidPng(500, 500, red, green, blue, 255);
+                this.outputBuffers[filename] = imageBuffer;
+                filenames.push(filename);
+            }
+            this.items[requestId] = filenames;
+        }, this.readyDelayMs);
+
         return requestId;
     }
 
     getPollResponse(requestId) {
-        const item = this.items[requestId];
-        if (!item) {
-            return { status: "pending" };
+        if (!(requestId in this.items)) {
+            return null;
         }
 
-        if (!this.isReady(requestId)) {
+        const item = this.items[requestId];
+        if (item === null) {
             return { status: "pending" };
         }
 
         return {
             status: "done",
-            url: "/outputs/" + requestId + ".png"
+            images: item.map((filename) => "/outputs/" + filename)
         };
     }
 
     getOutputByFilename(filename) {
-        const match = filename.match(/^(\d+)\.png$/);
-        if (!match) {
+        if (!(filename in this.outputBuffers)) {
             return null;
         }
-
-        const requestId = match[1];
-        const item = this.items[requestId];
-        if (!item) {
-            return null;
-        }
-
-        if (!this.isReady(requestId)) {
-            return null;
-        }
-
-        return item;
+        return this.outputBuffers[filename];
     }
 
     nextRequestId() {
         let requestId = String(Date.now());
-        while (this.items[requestId]) {
+        while (requestId in this.items) {
             requestId = String(Number(requestId) + 1);
         }
         return requestId;
-    }
-
-    isReady(requestId) {
-        return (Date.now() - Number(requestId)) > this.readyDelayMs;
     }
 
     createCrc32Table() {
@@ -189,7 +189,16 @@ app.post("/api/images", upload.array("images"), (req, res) => {
         return;
     }
 
-    const requestId = mockImageStore.createRequest();
+    if (req.body.negative_prompt === undefined) {
+        res.status(400).json({ error: "negative_prompt is required" });
+        return;
+    }
+
+    const rawNumImagesPerPrompt = Number.parseInt(req.body.num_images_per_prompt, 10);
+    const parsedNumImages = Number.isInteger(rawNumImagesPerPrompt) ? rawNumImagesPerPrompt : 1;
+    const numImagesPerPrompt = Math.max(1, Math.min(8, parsedNumImages));
+
+    const requestId = mockImageStore.createRequest(numImagesPerPrompt);
 
     res.json({ request_id: requestId });
 });
@@ -201,7 +210,13 @@ app.get("/api/images/:requestId", (req, res) => {
         return;
     }
 
-    res.json(mockImageStore.getPollResponse(requestId));
+    const pollResponse = mockImageStore.getPollResponse(requestId);
+    if (!pollResponse) {
+        res.status(404).json({ error: "unknown request_id" });
+        return;
+    }
+
+    res.json(pollResponse);
 });
 
 app.get("/outputs/:filename", (req, res) => {
@@ -229,3 +244,6 @@ app.listen(port, "0.0.0.0", () => {
 
 
 // node server-express-test.js 5000
+
+
+
