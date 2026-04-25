@@ -42,6 +42,11 @@ cat ~/.ssh/id_ed25519.pub
 > `Network volume`第一次要新建
 > 
 
+> 可以設環境變數`HF_TOKEN`值`hf_oooxxx`加快下載速度(`Change Template`左邊的`Edit`)
+> 
+
+
+
 ## pod啟動後
 - 至[console](https://console.runpod.io/deploy)
 - 點一下該pod
@@ -98,4 +103,28 @@ export HF_HOME=/workspace/huggingface_cache && cd /workspace/qwen-image-edit-web
 - `提示詞`、`[圖]`、`[lora名子]`、結果：生成的圖、或錯誤訊息或generating
 - 所有圖可以點擊開預覽100%、下方有按鈕`to prompt`
 - 可以`Resend`
+
+
+## 所用版本
+`server.py`中，自行切換註解即可
+```
+# MODEL_ID = "Qwen/Qwen-Image-Edit-2509"
+MODEL_ID = "Qwen/Qwen-Image-Edit-2511"
+```
+
+## lora
+
+### 2509所用
+- Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors
+- Qwen-Image-Edit-2509-Lightning-8steps-V1.0-bf16.safetensors
+- 溶图.safetensors
+
+> 4steps、8steps擇一即可
+> 
+
+### 2511所用
+- Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors
+- 2511-AnyPose-base-000006250.safetensors
+- 2511-AnyPose-helper-00006000.safetensors
+
 
