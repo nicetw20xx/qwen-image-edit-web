@@ -45,7 +45,7 @@ cat ~/.ssh/id_ed25519.pub
 ## pod啟動後
 - 至[console](https://console.runpod.io/deploy)
 - 點一下該pod
-- 先`SSH: Connect to your Pod using SSH. (No support for SCP & SFTP)`，就輸入那串指令
+- 先`SSH: Connect to your Pod using SSH. (No support for SCP & SFTP)`或`Connect to your Pod using SSH over a direct TCP connection. (Supports SCP & SFTP)`，就輸入那串指令
 - 進到容器
 
 
