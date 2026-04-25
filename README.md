@@ -1,8 +1,14 @@
 
 
-# `qwen-image-2509`預計部署到[RunPod](https://www.runpod.io/)
+# `qwen-image-2509`或`qwen-image-2511`預計部署到[RunPod](https://www.runpod.io/)
 
-![1776778236106.webp](imgs/1776778236106.webp)
+`server.py`中，自行切換註解即可
+```
+# MODEL_ID = "Qwen/Qwen-Image-Edit-2509"
+MODEL_ID = "Qwen/Qwen-Image-Edit-2511"
+```
+
+![1777138799219.webp](imgs/1777138799219.webp)
 
 ## 準備
 - 這僅僅是測試使用、**非常不安全**
@@ -105,12 +111,6 @@ export HF_HOME=/workspace/huggingface_cache && cd /workspace/qwen-image-edit-web
 - 可以`Resend`
 
 
-## 所用版本
-`server.py`中，自行切換註解即可
-```
-# MODEL_ID = "Qwen/Qwen-Image-Edit-2509"
-MODEL_ID = "Qwen/Qwen-Image-Edit-2511"
-```
 
 ## lora
 
@@ -119,12 +119,15 @@ MODEL_ID = "Qwen/Qwen-Image-Edit-2511"
 - Qwen-Image-Edit-2509-Lightning-8steps-V1.0-bf16.safetensors
 - 溶图.safetensors
 
-> 4steps、8steps擇一即可
+> `4steps`、`8steps`擇一即可
 > 
 
 ### 2511所用
 - Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors
 - 2511-AnyPose-base-000006250.safetensors
 - 2511-AnyPose-helper-00006000.safetensors
+
+> 粗測`base`、`helper`擇一即可
+> 
 
 
