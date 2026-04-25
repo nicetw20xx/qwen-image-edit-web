@@ -15,10 +15,16 @@ OUTPUTS_DIR = Path(__file__).parent / "outputs"
 STATIC_DIR = Path(__file__).parent / "static"
 OUTPUTS_DIR.mkdir(exist_ok=True)
 
+# MODEL_ID = "Qwen/Qwen-Image-Edit-2509"
+MODEL_ID = "Qwen/Qwen-Image-Edit-2511"
+
 LORAS = [
     "https://huggingface.co/lightx2v/Qwen-Image-Lightning/blob/main/Qwen-Image-Edit-2509/Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
     "https://huggingface.co/lightx2v/Qwen-Image-Lightning/blob/main/Qwen-Image-Edit-2509/Qwen-Image-Edit-2509-Lightning-8steps-V1.0-bf16.safetensors",
     "https://huggingface.co/dx8152/Qwen-Image-Edit-2509-Fusion/blob/main/%E6%BA%B6%E5%9B%BE.safetensors",
+    "https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning/blob/main/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+    "https://huggingface.co/lilylilith/AnyPose/blob/main/2511-AnyPose-base-000006250.safetensors",
+    "https://huggingface.co/lilylilith/AnyPose/blob/main/2511-AnyPose-helper-00006000.safetensors",
 ]
 
 QUEUE_LIMIT = 10
@@ -48,8 +54,9 @@ logging.getLogger("werkzeug").addFilter(SuppressRequestLogFilter())
 def load_model():
     global pipeline, original_scheduler, lightning_scheduler
     from diffusers import QwenImageEditPlusPipeline, FlowMatchEulerDiscreteScheduler
+
     pipeline = QwenImageEditPlusPipeline.from_pretrained(
-        "Qwen/Qwen-Image-Edit-2509",
+        MODEL_ID,
         torch_dtype=torch.bfloat16,
     ).to("cuda")
     original_scheduler = pipeline.scheduler
@@ -164,7 +171,7 @@ def run_inference(request_id, prompt, negative_prompt, images, lora_urls, true_c
     print(
         f"Generated {len(generated_filenames)} image(s) for {request_id} | "
         f"filenames: {generated_filenames} | "
-        f"prompt: {prompt}, negative_prompt: {negative_prompt}, loras: {lora_urls}, "
+        f"model_id: {MODEL_ID}, prompt: {prompt}, negative_prompt: {negative_prompt}, loras: {lora_urls}, "
         f"true_cfg_scale: {true_cfg_scale}, num_inference_steps: {num_inference_steps}, "
         f"num_images_per_prompt: {num_images_per_prompt}"
     )

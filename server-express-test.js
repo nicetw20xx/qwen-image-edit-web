@@ -10,7 +10,10 @@ const READY_DELAY_MS = 5000;
 const LORAS = [
     "https://huggingface.co/lightx2v/Qwen-Image-Lightning/blob/main/Qwen-Image-Edit-2509/Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
     "https://huggingface.co/lightx2v/Qwen-Image-Lightning/blob/main/Qwen-Image-Edit-2509/Qwen-Image-Edit-2509-Lightning-8steps-V1.0-bf16.safetensors",
-    "https://huggingface.co/dx8152/Qwen-Image-Edit-2509-Fusion/blob/main/%E6%BA%B6%E5%9B%BE.safetensors"
+    "https://huggingface.co/dx8152/Qwen-Image-Edit-2509-Fusion/blob/main/%E6%BA%B6%E5%9B%BE.safetensors",
+    "https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning/blob/main/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+    "https://huggingface.co/lilylilith/AnyPose/blob/main/2511-AnyPose-base-000006250.safetensors",
+    "https://huggingface.co/lilylilith/AnyPose/blob/main/2511-AnyPose-helper-00006000.safetensors"
 ];
 
 const app = express();
