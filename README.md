@@ -84,14 +84,14 @@ export HF_HOME=/workspace/huggingface_cache && cd /workspace/qwen-image-edit-web
 - 點一下該pod
 - 點Port 8888-`Jupyter Lab`，如果程式完成就可以看到網頁了
 
-![1776778236106.webp](imgs/1776778236106.webp)
+![1777138799219.webp](imgs/1777138799219.webp)
 
 
 
 # 功能
 
 ## 後端
-- 使用[https://huggingface.co/Qwen/Qwen-Image-Edit-2509](https://huggingface.co/Qwen/Qwen-Image-Edit-2509)
+- 使用[https://huggingface.co/Qwen/Qwen-Image-Edit-2509](https://huggingface.co/Qwen/Qwen-Image-Edit-2509) or 2511
 - 支援lora: 使用者提供huggingface的URL，取其檔名
 - 輸入為`提示詞、[圖]、[lora](選填)`
 - 該api輸入後會排隊，超過10個429
