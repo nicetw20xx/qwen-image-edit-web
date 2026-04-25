@@ -17,6 +17,7 @@ OUTPUTS_DIR.mkdir(exist_ok=True)
 
 LORAS = [
     "https://huggingface.co/lightx2v/Qwen-Image-Lightning/blob/main/Qwen-Image-Edit-2509/Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
+    "https://huggingface.co/lightx2v/Qwen-Image-Lightning/blob/main/Qwen-Image-Edit-2509/Qwen-Image-Edit-2509-Lightning-8steps-V1.0-bf16.safetensors",
     "https://huggingface.co/dx8152/Qwen-Image-Edit-2509-Fusion/blob/main/%E6%BA%B6%E5%9B%BE.safetensors",
 ]
 
@@ -24,6 +25,9 @@ QUEUE_LIMIT = 10
 queue_lock = threading.Lock()
 queue_count = 0
 inference_semaphore = threading.Semaphore(1)
+request_state_lock = threading.Lock()
+request_results = {}
+request_errors = {}
 
 pipeline = None
 loaded_lora_adapters = {}
@@ -106,7 +110,7 @@ def round_to_multiple_of_16(value):
     return (value // 16) * 16
 
 
-def run_inference(request_id, prompt, images, lora_urls, guidance_scale, true_cfg_scale, num_inference_steps):
+def run_inference(request_id, prompt, negative_prompt, images, lora_urls, true_cfg_scale, num_inference_steps, num_images_per_prompt):
     has_lora = bool(lora_urls)
 
     if has_lora:
@@ -134,22 +138,37 @@ def run_inference(request_id, prompt, images, lora_urls, guidance_scale, true_cf
         processed_images.append(img)
 
     generate_kwargs = {
+        "image": processed_images if len(processed_images)>0 else None,
         "prompt": prompt,
-        "negative_prompt": " ",
-        "guidance_scale": guidance_scale,
-        "true_cfg_scale": true_cfg_scale,
+        "height": None,
+        "width": None,
+        "negative_prompt": negative_prompt,
         "num_inference_steps": num_inference_steps,
+        "generator": None,
+        "true_cfg_scale": true_cfg_scale,
+        "num_images_per_prompt": num_images_per_prompt,
     }
-    if processed_images:
-        generate_kwargs["image"] = processed_images
 
     result = pipeline(**generate_kwargs)
-    output_image = result.images[0]
+    output_images = result.images
+    if not output_images:
+        raise RuntimeError("Pipeline returned no images")
 
-    filename = f"{request_id}.png"
-    output_path = OUTPUTS_DIR / filename
-    output_image.save(output_path)
-    print(f"Generated {filename} | prompt: {prompt}, loras: {lora_urls}, guidance_scale: {guidance_scale}, true_cfg_scale: {true_cfg_scale}, num_inference_steps: {num_inference_steps}")
+    generated_filenames = []
+    for idx, output_image in enumerate(output_images):
+        filename = f"{request_id}_{idx}.png"
+        output_path = OUTPUTS_DIR / filename
+        output_image.save(output_path)
+        generated_filenames.append(filename)
+
+    print(
+        f"Generated {len(generated_filenames)} image(s) for {request_id} | "
+        f"filenames: {generated_filenames} | "
+        f"prompt: {prompt}, negative_prompt: {negative_prompt}, loras: {lora_urls}, "
+        f"true_cfg_scale: {true_cfg_scale}, num_inference_steps: {num_inference_steps}, "
+        f"num_images_per_prompt: {num_images_per_prompt}"
+    )
+    return generated_filenames
 
 
 def build_lora_filename_map():
@@ -170,19 +189,30 @@ def get_loras():
     # return jsonify([])
 
 
-def run_inference_background(request_id, prompt, images, lora_urls, guidance_scale, true_cfg_scale, num_inference_steps):
+def run_inference_background(request_id, prompt, negative_prompt, images, lora_urls, true_cfg_scale, num_inference_steps, num_images_per_prompt):
     global queue_count
     try:
         inference_semaphore.acquire()
         try:
-            run_inference(request_id, prompt, images, lora_urls, guidance_scale, true_cfg_scale, num_inference_steps)
+            generated_filenames = run_inference(
+                request_id,
+                prompt,
+                negative_prompt,
+                images,
+                lora_urls,
+                true_cfg_scale,
+                num_inference_steps,
+                num_images_per_prompt,
+            )
+            with request_state_lock:
+                request_results[request_id] = generated_filenames
         finally:
             inference_semaphore.release()
     except Exception as e:
         import traceback
         traceback.print_exc()
-        error_path = OUTPUTS_DIR / f"{request_id}.error"
-        error_path.write_text(str(e), encoding="utf-8")
+        with request_state_lock:
+            request_errors[request_id] = str(e)
     finally:
         with queue_lock:
             queue_count -= 1
@@ -196,8 +226,11 @@ def generate_images():
     if not prompt:
         return jsonify({"error": "prompt is required"}), 400
 
+    negative_prompt = request.form.get("negative_prompt")
+    if negative_prompt is None:
+        return jsonify({"error": "negative_prompt is required"}), 400
+
     lora_filenames = request.form.getlist("lora")
-    # lora_filenames = list(LORA_FILENAME_TO_URL.keys())
     lora_urls = []
     for lora_filename in lora_filenames:
         lora_filename = lora_filename.strip()
@@ -209,10 +242,11 @@ def generate_images():
         lora_urls.append(lora_url)
 
     has_lora = bool(lora_urls)
-    guidance_scale = float(request.form.get("guidance_scale", 1.0))
     true_cfg_scale = float(request.form.get("true_cfg_scale", 1.0 if has_lora else 4.0))
     num_inference_steps = int(request.form.get("num_inference_steps", 4 if has_lora else 40))
+    num_images_per_prompt = int(request.form.get("num_images_per_prompt", 1))
     num_inference_steps = max(1, min(100, num_inference_steps))
+    num_images_per_prompt = max(1, min(8, num_images_per_prompt))
 
     with queue_lock:
         if queue_count >= QUEUE_LIMIT:
@@ -227,9 +261,22 @@ def generate_images():
 
     request_id = str(int(time.time() * 1000))
 
+    with request_state_lock:
+        request_results[request_id] = None
+        request_errors.pop(request_id, None)
+
     thread = threading.Thread(
         target=run_inference_background,
-        args=(request_id, prompt, images, lora_urls, guidance_scale, true_cfg_scale, num_inference_steps),
+        args=(
+            request_id,
+            prompt,
+            negative_prompt,
+            images,
+            lora_urls,
+            true_cfg_scale,
+            num_inference_steps,
+            num_images_per_prompt,
+        ),
     )
     thread.start()
 
@@ -241,15 +288,22 @@ def poll_image(request_id):
     if not request_id.isdigit():
         return jsonify({"error": "invalid request_id"}), 400
 
-    error_path = OUTPUTS_DIR / f"{request_id}.error"
-    if error_path.exists():
-        return jsonify({"status": "error", "error": error_path.read_text(encoding="utf-8")})
+    with request_state_lock:
+        result = request_results.get(request_id)
+        has_request = request_id in request_results
+        error_message = request_errors.get(request_id)
 
-    image_path = OUTPUTS_DIR / f"{request_id}.png"
-    if image_path.exists():
-        return jsonify({"status": "done", "url": f"/outputs/{request_id}.png"})
+    if error_message:
+        return jsonify({"status": "error", "error": error_message})
 
-    return jsonify({"status": "pending"})
+    if has_request and result is None:
+        return jsonify({"status": "pending"})
+
+    if has_request and isinstance(result, list):
+        urls = [f"/outputs/{filename}" for filename in result]
+        return jsonify({"status": "done", "images": urls})
+
+    return jsonify({"error": "unknown request_id"}), 404
 
 
 @app.route("/outputs/<path:filename>")

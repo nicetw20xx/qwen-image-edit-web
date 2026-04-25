@@ -13,9 +13,10 @@ createApp({
       dragIndex: -1,
       nextImageId: 1,
       nextHistoryId: 1,
-      guidanceScale: 1.0,
+      negativePrompt: " ",
       trueCfgScale: 2.0,
       numInferenceSteps: 10,
+      numImagesPerPrompt: 1,
     };
   },
 
@@ -138,10 +139,11 @@ createApp({
       if (!prompt) return;
       await this._doRequest({
         prompt,
+        negativePrompt: this.negativePrompt,
         loraFilenames: [...this.selectedLoras],
-        guidanceScale: this.guidanceScale,
         trueCfgScale: this.trueCfgScale,
         numInferenceSteps: this.numInferenceSteps,
+        numImagesPerPrompt: this.numImagesPerPrompt,
         inputImages: this.inputImages.map((img) => ({ objectUrl: img.objectUrl, file: img.file })),
       });
     },
@@ -149,34 +151,37 @@ createApp({
     async resendRequest(item) {
       await this._doRequest({
         prompt: item.prompt,
+        negativePrompt: item.negativePrompt,
         loraFilenames: [...item.loraFilenames],
-        guidanceScale: item.guidanceScale,
         trueCfgScale: item.trueCfgScale,
         numInferenceSteps: item.numInferenceSteps,
+        numImagesPerPrompt: item.numImagesPerPrompt,
         inputImages: item.inputImages.map((img) => ({ objectUrl: img.objectUrl, file: img.file })),
       });
     },
 
-    async _doRequest({ prompt, loraFilenames, guidanceScale, trueCfgScale, numInferenceSteps, inputImages }) {
+    async _doRequest({ prompt, negativePrompt, loraFilenames, trueCfgScale, numInferenceSteps, numImagesPerPrompt, inputImages }) {
       const formData = new FormData();
       formData.append("prompt", prompt);
-      formData.append("guidance_scale", guidanceScale);
+      formData.append("negative_prompt", negativePrompt);
       formData.append("true_cfg_scale", trueCfgScale);
       formData.append("num_inference_steps", numInferenceSteps);
+      formData.append("num_images_per_prompt", numImagesPerPrompt);
       for (const lora of loraFilenames) formData.append("lora", lora);
       for (const img of inputImages) formData.append("images", img.file);
 
       const historyEntry = {
         id: this.nextHistoryId++,
         prompt,
+        negativePrompt,
         loraFilenames,
-        guidanceScale,
         trueCfgScale,
         numInferenceSteps,
+        numImagesPerPrompt,
         inputImages,
         status: "generating",
-        resultUrl: null,
-        resultFile: null,
+        resultUrls: [],
+        resultFiles: [],
         errorMessage: null,
       };
 
@@ -206,15 +211,19 @@ createApp({
           const data = await res.json();
 
           if (data.status === "done") {
-            entry.resultUrl = data.url;
+            const resultUrls = Array.isArray(data.images) ? data.images : [];
+            entry.resultUrls = resultUrls;
+            entry.resultFiles = new Array(resultUrls.length).fill(null);
             entry.status = "done";
-            fetch(data.url)
-              .then((r) => r.blob())
-              .then((blob) => {
-                const filename = data.url.split("/").pop() || "result.png";
-                entry.resultFile = new File([blob], filename, { type: blob.type });
-              })
-              .catch(() => {});
+            resultUrls.forEach((url, idx) => {
+              fetch(url)
+                .then((r) => r.blob())
+                .then((blob) => {
+                  const filename = url.split("/").pop() || `result_${idx}.png`;
+                  entry.resultFiles[idx] = new File([blob], filename, { type: blob.type });
+                })
+                .catch(() => {});
+            });
             return;
           }
 

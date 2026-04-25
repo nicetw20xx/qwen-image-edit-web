@@ -62,6 +62,13 @@
                 </div>
 
                 <div>
+                    <label class="font-semibold text-sm text-purple-400">Negative Prompt</label>
+                    <textarea
+                        class="w-full min-h-[64px] p-2.5 border border-gray-700 rounded-lg bg-app-card text-gray-200 text-sm resize-y focus:outline-none focus:border-purple-400"
+                        v-model="negativePrompt" placeholder="Optional negative prompt..."></textarea>
+                </div>
+
+                <div>
                     <label class="font-semibold text-sm text-purple-400">Images</label>
                     <div class="border-2 border-dashed border-gray-600 rounded-lg p-5 text-center text-gray-500 cursor-pointer transition-all min-h-[80px]"
                         :class="{ 'border-purple-400 bg-purple-400/10 text-purple-400': isDragOver }"
@@ -104,16 +111,6 @@
                     <label class="font-semibold text-sm text-purple-400">Parameters</label>
                     <div class="flex flex-col gap-1">
                         <div class="flex items-center gap-2">
-                            <label class="text-xs text-gray-400 w-36 shrink-0">Guidance Scale</label>
-                            <input type="number" step="0.1" min="0" max="20" v-model.number="guidanceScale"
-                                class="flex-1 p-1.5 border border-gray-700 rounded bg-app-card text-gray-200 text-sm focus:outline-none focus:border-purple-400">
-                        </div>
-                        <div class="text-[0.65rem] text-gray-500 ml-1">0~20. Higher = stronger denoising guidance. 0 =
-                            no guidance.
-                        </div>
-                    </div>
-                    <div class="flex flex-col gap-1">
-                        <div class="flex items-center gap-2">
                             <label class="text-xs text-gray-400 w-36 shrink-0">True CFG Scale</label>
                             <input type="number" step="0.1" min="1" max="20" v-model.number="trueCfgScale"
                                 class="flex-1 p-1.5 border border-gray-700 rounded bg-app-card text-gray-200 text-sm focus:outline-none focus:border-purple-400">
@@ -131,6 +128,14 @@
                         <div class="text-[0.65rem] text-gray-500 ml-1">1~100. More steps = finer detail but slower.
                             Lightning LoRA
                             ~4, base ~40.</div>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <div class="flex items-center gap-2">
+                            <label class="text-xs text-gray-400 w-36 shrink-0">Images / Request</label>
+                            <input type="number" step="1" min="1" max="8" v-model.number="numImagesPerPrompt"
+                                class="flex-1 p-1.5 border border-gray-700 rounded bg-app-card text-gray-200 text-sm focus:outline-none focus:border-purple-400">
+                        </div>
+                        <div class="text-[0.65rem] text-gray-500 ml-1">1~8. Number of output images under one request id.</div>
                     </div>
                 </div>
 
@@ -156,10 +161,13 @@
                         </span>
                     </div>
                     <div class="text-sm mb-2 break-words">{{ item.prompt }}</div>
+                    <div class="text-xs mb-2 break-words text-gray-400" v-if="item.negativePrompt">
+                        Negative: {{ item.negativePrompt }}
+                    </div>
                     <div class="flex flex-wrap gap-x-4 gap-y-0.5 text-[0.7rem] text-gray-500 mb-2">
-                        <span>Guidance: {{ item.guidanceScale }}</span>
                         <span>True CFG: {{ item.trueCfgScale }}</span>
                         <span>Steps: {{ item.numInferenceSteps }}</span>
+                        <span>Images: {{ item.numImagesPerPrompt }}</span>
                     </div>
 
                     <div class="flex flex-wrap gap-1.5 mb-2" v-if="item.inputImages.length">
@@ -180,14 +188,16 @@
                         </div>
                         <div v-else-if="item.status === 'done'">
                             <label class="text-xs text-gray-500 block mb-1">Result:</label>
-                            <div class="relative inline-block">
-                                <img class="max-w-full max-h-[400px] rounded-md cursor-pointer border border-gray-700 hover:border-purple-400"
-                                    :src="item.resultUrl" @click="openPreview(item.resultUrl)">
-                                <div>
-                                    <button
-                                        class="mt-1 px-1.5 text-[0.7rem] bg-gray-700 text-purple-400 border border-purple-400 rounded cursor-pointer hover:bg-purple-400 hover:text-white"
-                                        @click="item.resultFile ? addFileToInput(item.resultFile) : addToInput(item.resultUrl)">to
-                                        prompt</button>
+                            <div class="flex flex-wrap gap-2">
+                                <div class="relative inline-block" v-for="(url, idx) in item.resultUrls" :key="`${item.id}-${idx}`">
+                                    <img class="max-w-full max-h-[400px] rounded-md cursor-pointer border border-gray-700 hover:border-purple-400"
+                                        :src="url" @click="openPreview(url)">
+                                    <div>
+                                        <button
+                                            class="mt-1 px-1.5 text-[0.7rem] bg-gray-700 text-purple-400 border border-purple-400 rounded cursor-pointer hover:bg-purple-400 hover:text-white"
+                                            @click="item.resultFiles[idx] ? addFileToInput(item.resultFiles[idx]) : addToInput(url)">to
+                                            prompt</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
