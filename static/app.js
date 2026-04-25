@@ -34,7 +34,7 @@ createApp({
       try {
         const response = await fetch("/api/loras");
         this.availableLoras = await response.json();
-        this.selectedLoras = [...this.availableLoras];
+        this.selectedLoras = [...this.availableLoras].filter(l => !l.includes("8steps"));
       } catch (e) {
         console.error("Failed to fetch loras:", e);
       }
@@ -222,7 +222,7 @@ createApp({
                   const filename = url.split("/").pop() || `result_${idx}.png`;
                   entry.resultFiles[idx] = new File([blob], filename, { type: blob.type });
                 })
-                .catch(() => {});
+                .catch(() => { });
             });
             return;
           }
