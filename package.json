@@ -1,0 +1,14 @@
+{
+  "name": "qwen-image-edit-web-test-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start:test": "node server-express-test.js",
+    "start:test:8888": "node server-express-test.js 8888"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1"
+  }
+}
